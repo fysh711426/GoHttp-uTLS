@@ -1,19 +1,31 @@
 package main
 
+// #include <stdlib.h>
+// typedef void (*callback)(char*);
+// static void helper(callback f, char *str) { f(str); }
+import "C"
+
 import (
-	"C"
 	"bufio"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"time"
+	"unsafe"
 
 	tls "github.com/refraction-networking/utls"
 	"golang.org/x/net/http2"
 )
 
 //export HttpGet
-func HttpGet(curl *C.char) string {
+func HttpGet(curl *C.char, f C.callback) {
+	html := HttpGetWarp(curl)
+	ptr := C.CString(html)
+	C.helper(f, ptr)
+	C.free(unsafe.Pointer(ptr))
+}
+
+func HttpGetWarp(curl *C.char) string {
 	url := C.GoString(curl)
 	req, _ := http.NewRequest("GET", url, nil)
 	req.Header.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36")
