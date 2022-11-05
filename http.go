@@ -11,6 +11,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -22,6 +23,12 @@ import (
 	tls "github.com/refraction-networking/utls"
 	"golang.org/x/net/http2"
 )
+
+type BytesStruct struct {
+	addr unsafe.Pointer
+	len  int
+	cap  int
+}
 
 //export HttpGet
 func HttpGet(url *C.char, header *C.char, f C.callback) {
@@ -43,6 +50,7 @@ func HttpGetWarp(url *C.char, header *C.char) string {
 		return GetResult("", err)
 	}
 
+	defer resp.Body.Close()
 	bytes, err := httputil.DumpResponse(resp, true)
 	if err != nil {
 		return GetResult("", err)
@@ -70,30 +78,50 @@ func HttpGetBytesWarp(url *C.char, header *C.char, bfunc C.bytesCallback) string
 		return GetResult("", err)
 	}
 
-	// Golang 解决TCP"粘包"问题
-	// https://cloud.tencent.com/developer/article/1801065
-	reader := bufio.NewReader(resp.Body)
+	defer resp.Body.Close()
+	bytes, err := httputil.DumpResponse(resp, false)
+	if err != nil {
+		return GetResult("", err)
+	}
+	n := len(bytes)
+	p := C.int(n)
+
+	ptr := (*C.char)((*BytesStruct)(unsafe.Pointer(&bytes)).addr)
+	fmt.Printf("ptr: %d\n", uintptr((*BytesStruct)(unsafe.Pointer(&bytes)).addr))
+	// ptr: 824633820928
+	fmt.Printf("ptr: %d\n", uintptr(*(*uintptr)(unsafe.Pointer(&bytes))))
+	// ptr: 824633820928
+	fmt.Printf("ptr: %d\n", uintptr(unsafe.Pointer(&bytes)))
+	// ptr: 824633737600
+	fmt.Printf("ptr: %d\n", uintptr(unsafe.Pointer(&bytes[0])))
+	// ptr: 824633820928
+	C.bytesHelper(bfunc, ptr, p)
+
+	buffer := make([]byte, 1024)
 	for {
-		data, err := reader.ReadSlice('\n')
-		if err != nil {
-			if err != io.EOF {
-				return GetResult("", err)
-			} else {
-				break
-			}
+		n, err := resp.Body.Read(buffer)
+		if n > 0 {
+			p := C.int(n)
+			ptr := (*C.char)(unsafe.Pointer(&buffer[0]))
+			C.bytesHelper(bfunc, ptr, p)
 		}
-		n := len(data)
-		p := C.int(n)
-		ptr := (*C.char)(unsafe.Pointer(&data))
-		C.bytesHelper(bfunc, ptr, p)
+		if err != nil {
+			if err == io.EOF {
+				err = nil
+			}
+			break
+		}
+	}
+	if err != nil {
+		return GetResult("", err)
 	}
 	return GetResult("", nil)
 }
 
 type Result struct {
 	Success bool
-	Data    string
 	Error   string
+	Data    string
 }
 
 func GetResult(data string, err error) string {
