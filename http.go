@@ -11,7 +11,6 @@ import (
 	"bufio"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -28,6 +27,12 @@ type BytesStruct struct {
 	addr unsafe.Pointer
 	len  int
 	cap  int
+}
+
+type Result struct {
+	Success bool
+	Error   string
+	Data    string
 }
 
 //export HttpGet
@@ -85,16 +90,7 @@ func HttpGetBytesWarp(url *C.char, header *C.char, bfunc C.bytesCallback) string
 	}
 	n := len(bytes)
 	p := C.int(n)
-
 	ptr := (*C.char)((*BytesStruct)(unsafe.Pointer(&bytes)).addr)
-	fmt.Printf("ptr: %d\n", uintptr((*BytesStruct)(unsafe.Pointer(&bytes)).addr))
-	// ptr: 824633820928
-	fmt.Printf("ptr: %d\n", uintptr(*(*uintptr)(unsafe.Pointer(&bytes))))
-	// ptr: 824633820928
-	fmt.Printf("ptr: %d\n", uintptr(unsafe.Pointer(&bytes)))
-	// ptr: 824633737600
-	fmt.Printf("ptr: %d\n", uintptr(unsafe.Pointer(&bytes[0])))
-	// ptr: 824633820928
 	C.bytesHelper(bfunc, ptr, p)
 
 	buffer := make([]byte, 1024)
@@ -116,12 +112,6 @@ func HttpGetBytesWarp(url *C.char, header *C.char, bfunc C.bytesCallback) string
 		return GetResult("", err)
 	}
 	return GetResult("", nil)
-}
-
-type Result struct {
-	Success bool
-	Error   string
-	Data    string
 }
 
 func GetResult(data string, err error) string {
@@ -219,8 +209,7 @@ func HttpHandler(req *http.Request, uConn *tls.UConn) (*http.Response, error) {
 		return nil, err
 	}
 
-	var resp *http.Response
-	resp, err = http.ReadResponse(bufio.NewReader(uConn), req)
+	resp, err := http.ReadResponse(bufio.NewReader(uConn), req)
 	if err != nil {
 		return nil, err
 	}
@@ -238,8 +227,7 @@ func Http2Handler(req *http.Request, uConn *tls.UConn) (*http.Response, error) {
 		return nil, err
 	}
 
-	var resp *http.Response
-	resp, err = cConn.RoundTrip(req)
+	resp, err := cConn.RoundTrip(req)
 	if err != nil {
 		return nil, err
 	}
