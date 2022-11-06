@@ -1,10 +1,38 @@
-﻿namespace Example
+﻿using GoHttp_uTLS;
+using System;
+using System.IO;
+using System.Threading.Tasks;
+
+namespace Example
 {
     public class Program
     {
-        public static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
-            Console.WriteLine("Hello, World!");
+            var http = new GoHttp();
+
+            // Set request timeout 
+            http.Timeout = TimeSpan.FromSeconds(30);
+
+            // Set the browser fingerprint used by uTLS
+            http.ClientHello = ClientHello.HelloChrome_Auto;
+
+            var url = "";
+
+            // Get response with header and body
+            var httpContent = await http.GetAsync(url,
+                HttpBody.HeaderAndBody);
+
+            // Download file
+            var saveName = @"D:\xxx\file.jpg";
+            using (var fs = new FileStream(saveName, 
+                FileMode.Create, FileAccess.Write))
+            {
+                await http.GetBytesAsync(url, (bytes) =>
+                {
+                    fs.Write(bytes, 0, bytes.Length);
+                });
+            }
         }
     }
 }
