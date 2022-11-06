@@ -3,8 +3,8 @@ package main
 // #include <stdlib.h>
 // typedef void (*callback)(char*);
 // static void helper(callback f, char *str) { f(str); }
-// typedef void (*bytesCallback)(char*, int);
-// static void bytesHelper(bytesCallback f, char *bytes, int n) { f(bytes, n); }
+// typedef int (*bytesCallback)(char*, int);
+// static int bytesHelper(bytesCallback f, char *bytes, int n) { return f(bytes, n); }
 import "C"
 
 import (
@@ -36,80 +36,106 @@ type Result struct {
 }
 
 //export HttpGet
-func HttpGet(url *C.char, header *C.char, f C.callback) {
-	result := HttpGetWarp(url, header)
+func HttpGet(url *C.char, header *C.char, f C.callback, httpBody int, timeout int, clientHello int) {
+	result := HttpGetWarp(url, header, httpBody, timeout, clientHello)
 	ptr := C.CString(result)
 	C.helper(f, ptr)
 	C.free(unsafe.Pointer(ptr))
 }
 
-func HttpGetWarp(url *C.char, header *C.char) string {
+func HttpGetWarp(url *C.char, header *C.char, httpBody int, timeout int, clientHello int) string {
 	_url := C.GoString(url)
 	_header := C.GoString(header)
 
 	req, _ := http.NewRequest("GET", _url, nil)
 	SetRequestHeader(req, _header)
 
-	resp, err := GetResponse(req)
+	resp, err := GetResponse(req, timeout, clientHello)
 	if err != nil {
 		return GetResult("", err)
 	}
 
 	defer resp.Body.Close()
-	bytes, err := httputil.DumpResponse(resp, true)
+
+	body := true
+	if httpBody == 1 {
+		body = false
+	}
+	bytes, err := httputil.DumpResponse(resp, body)
 	if err != nil {
 		return GetResult("", err)
 	}
-	return GetResult(string(bytes), nil)
+
+	data := string(bytes)
+	if httpBody == 0 {
+		split := strings.SplitN(data, "\r\n\r\n", 2)
+		if len(split) < 2 {
+			data = ""
+		} else {
+			data = split[1]
+		}
+	}
+	return GetResult(data, nil)
 }
 
 //export HttpGetBytes
-func HttpGetBytes(url *C.char, header *C.char, bfunc C.bytesCallback, f C.callback) {
-	result := HttpGetBytesWarp(url, header, bfunc)
+func HttpGetBytes(url *C.char, header *C.char, bfunc C.bytesCallback, f C.callback, httpBody int, timeout int, clientHello int) {
+	result := HttpGetBytesWarp(url, header, bfunc, httpBody, timeout, clientHello)
 	ptr := C.CString(result)
 	C.helper(f, ptr)
 	C.free(unsafe.Pointer(ptr))
 }
 
-func HttpGetBytesWarp(url *C.char, header *C.char, bfunc C.bytesCallback) string {
+func HttpGetBytesWarp(url *C.char, header *C.char, bfunc C.bytesCallback, httpBody int, timeout int, clientHello int) string {
 	_url := C.GoString(url)
 	_header := C.GoString(header)
 
 	req, _ := http.NewRequest("GET", _url, nil)
 	SetRequestHeader(req, _header)
 
-	resp, err := GetResponse(req)
+	resp, err := GetResponse(req, timeout, clientHello)
 	if err != nil {
 		return GetResult("", err)
 	}
 
 	defer resp.Body.Close()
-	bytes, err := httputil.DumpResponse(resp, false)
-	if err != nil {
-		return GetResult("", err)
-	}
-	n := len(bytes)
-	p := C.int(n)
-	ptr := (*C.char)((*BytesStruct)(unsafe.Pointer(&bytes)).addr)
-	C.bytesHelper(bfunc, ptr, p)
 
-	buffer := make([]byte, 1024)
-	for {
-		n, err := resp.Body.Read(buffer)
-		if n > 0 {
-			p := C.int(n)
-			ptr := (*C.char)(unsafe.Pointer(&buffer[0]))
-			C.bytesHelper(bfunc, ptr, p)
+	if httpBody == 1 || httpBody == 2 {
+		bytes, err := httputil.DumpResponse(resp, false)
+		if err != nil {
+			return GetResult("", err)
+		}
+		n := len(bytes)
+		p := C.int(n)
+		ptr := (*C.char)((*BytesStruct)(unsafe.Pointer(&bytes)).addr)
+		exit := C.bytesHelper(bfunc, ptr, p)
+		if int(exit) == 1 {
+			return GetResult("", nil)
+		}
+	}
+
+	if httpBody == 0 || httpBody == 2 {
+		buffer := make([]byte, 4096)
+		for {
+			n, err := resp.Body.Read(buffer)
+			if n > 0 {
+				p := C.int(n)
+				ptr := (*C.char)(unsafe.Pointer(&buffer[0]))
+				exit := C.bytesHelper(bfunc, ptr, p)
+				if int(exit) == 1 {
+					return GetResult("", nil)
+				}
+			}
+			if err != nil {
+				if err == io.EOF {
+					err = nil
+				}
+				break
+			}
 		}
 		if err != nil {
-			if err == io.EOF {
-				err = nil
-			}
-			break
+			return GetResult("", err)
 		}
-	}
-	if err != nil {
-		return GetResult("", err)
 	}
 	return GetResult("", nil)
 }
@@ -145,9 +171,9 @@ func SetRequestHeader(req *http.Request, header string) {
 	}
 }
 
-func GetResponse(req *http.Request) (*http.Response, error) {
+func GetResponse(req *http.Request, timeout int, clientHello int) (*http.Response, error) {
 	var resp *http.Response
-	uConn, err := HandshakeHandler(req)
+	uConn, err := HandshakeHandler(req, timeout, clientHello)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +188,7 @@ func GetResponse(req *http.Request) (*http.Response, error) {
 		resp, err = Http2Handler(req, uConn)
 		if err != nil {
 			if strings.HasPrefix(err.Error(), "unexpected EOF") {
-				uConn, err = HandshakeHandler(req)
+				uConn, err = HandshakeHandler(req, timeout, clientHello)
 				if err != nil {
 					return nil, err
 				}
@@ -181,17 +207,21 @@ func GetResponse(req *http.Request) (*http.Response, error) {
 	return resp, nil
 }
 
-func HandshakeHandler(req *http.Request) (*tls.UConn, error) {
+func HandshakeHandler(req *http.Request, timeout int, clientHello int) (*tls.UConn, error) {
 	hostname := req.Host
 	addr := hostname + ":443"
 
 	config := tls.Config{ServerName: hostname}
-	dialConn, err := net.DialTimeout("tcp", addr, time.Duration(30)*time.Second)
+	dialConn, err := net.DialTimeout("tcp", addr, time.Duration(timeout)*time.Millisecond)
 	if err != nil {
 		return nil, err
 	}
 
-	uConn := tls.UClient(dialConn, &config, tls.HelloChrome_102)
+	clientHelloID := GetClientHelloID(clientHello)
+	if clientHelloID == nil {
+		return nil, errors.New("not found ClientHelloID")
+	}
+	uConn := tls.UClient(dialConn, &config, *clientHelloID)
 	err = uConn.Handshake()
 	if err != nil {
 		return nil, err
@@ -234,9 +264,4 @@ func Http2Handler(req *http.Request, uConn *tls.UConn) (*http.Response, error) {
 	return resp, nil
 }
 
-func main() {
-	url := ""
-	header := ""
-	resp := HttpGetWarp(C.CString(url), C.CString(header))
-	print(resp)
-}
+func main() {}
