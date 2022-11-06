@@ -13,31 +13,14 @@ namespace GoHttp_uTLS
             // Environment.SetEnvironmentVariable("GODEBUG", "cgocheck=0");
         }
 
-        class Result
-        {
-            public bool Success { get; set; }
-            public string Data { get; set; }
-            public string Error { get; set; }
-        }
-
-        static string GoStringToCSharpString(IntPtr pointer)
-        {
-            var length = 0;
-            while (Marshal.ReadByte(pointer + length) != 0)
-                length++;
-            var buffer = new byte[length];
-            Marshal.Copy(pointer, buffer, 0, length);
-            return Encoding.UTF8.GetString(buffer);
-        }
-
         [UnmanagedFunctionPointer(CallingConvention.StdCall)]
         delegate void Callback(IntPtr str);
 
-        [DllImport("GoHttp.dll", EntryPoint = "HttpGet", CallingConvention = CallingConvention.StdCall)]
+        [DllImport("GoHttpLib.dll", EntryPoint = "HttpGet", CallingConvention = CallingConvention.StdCall)]
         extern static void _HttpGet(byte[] url, byte[] header,
             [MarshalAs(UnmanagedType.FunctionPtr)] Callback callback);
 
-        public static Task<string> GetAsync(string url, string header = "", bool bodyOnly = true)
+        public static Task<string> GetAsync(string url, string header = "", bool respWithHeader = false)
         {
             var tsc = new TaskCompletionSource<string>();
             Task.Run(() =>
@@ -50,15 +33,18 @@ namespace GoHttp_uTLS
                         Encoding.UTF8.GetBytes(header),
                         (str) =>
                         {
-                            json = GoStringToCSharpString(str);
+                            json = Utils.GoStringToCSharpString(str);
                         });
                     var result = JsonConvert.DeserializeObject<Result>(json);
+                    if (result == null)
+                        throw new Exception("Result cannot be null.");
                     if (result.Success)
                     {
                         var body = result.Data;
-                        if (bodyOnly)
+                        if (!respWithHeader)
                         {
-                            var split = result.Data.Split("\r\n\r\n", 2);
+                            var split = result.Data.Split(
+                                new string[] { "\r\n\r\n" }, 2, StringSplitOptions.None);
                             body = split.Length < 2 ? "" : split[1];
                         }
                         tsc.SetResult(body);
@@ -77,20 +63,24 @@ namespace GoHttp_uTLS
         [UnmanagedFunctionPointer(CallingConvention.StdCall)]
         delegate void BytesCallback(IntPtr bytes, int n);
 
-        [DllImport("GoHttp.dll", EntryPoint = "HttpGetBytes", CallingConvention = CallingConvention.StdCall)]
+        [DllImport("GoHttpLib.dll", EntryPoint = "HttpGetBytes", CallingConvention = CallingConvention.StdCall)]
         extern static void _HttpGetBytes(byte[] url, byte[] header,
             [MarshalAs(UnmanagedType.FunctionPtr)] BytesCallback bcallback,
             [MarshalAs(UnmanagedType.FunctionPtr)] Callback callback);
 
-        public static Task GetBytesAsync(string url, Action<byte[]> callback, bool bodyOnly = true)
-            => _GetBytesAsync(url, callback: callback, bodyOnly: bodyOnly);
-        public static Task GetBytesAsync(string url, string header, Action<byte[]> callback, bool bodyOnly = true)
-            => _GetBytesAsync(url, header: header, callback: callback, bodyOnly: bodyOnly);
+        public static Task GetBytesAsync(string url, Action<byte[]> callback, bool respWithHeader = false)
+            => GetBytesAsync(url, "", callback, respWithHeader);
 
-        static Task _GetBytesAsync(string url,
-            string header = "", Action<byte[]> callback = null, bool bodyOnly = true)
+        public static Task GetBytesAsync(string url, 
+            string header, Action<byte[]> callback, bool respWithHeader = false)
         {
-            var tsc = new TaskCompletionSource();
+            if (string.IsNullOrEmpty(url))
+                throw new Exception("url cannot be empty.");
+            if (callback == null)
+                throw new Exception("callback cannot be null.");
+            header = header ?? "";
+
+            var tsc = new TaskCompletionSource<bool>();
             Task.Run(() =>
             {
                 try
@@ -102,7 +92,7 @@ namespace GoHttp_uTLS
                         Encoding.UTF8.GetBytes(header),
                         (ptr, n) =>
                         {
-                            if (bodyOnly && isFirst)
+                            if (!respWithHeader && isFirst)
                             {
                                 isFirst = false;
                                 return;
@@ -113,11 +103,13 @@ namespace GoHttp_uTLS
                         },
                         (str) =>
                         {
-                            json = GoStringToCSharpString(str);
+                            json = Utils.GoStringToCSharpString(str);
                         });
                     var result = JsonConvert.DeserializeObject<Result>(json);
+                    if (result == null)
+                        throw new Exception("Result cannot be null.");
                     if (result.Success)
-                        tsc.SetResult();
+                        tsc.SetResult(true);
                     else
                         throw new Exception(result.Error);
                 }
