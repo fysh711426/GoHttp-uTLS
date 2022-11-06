@@ -1,0 +1,8 @@
+/.vscode
+/Example/bin
+/Example/obj
+/GoHttpLib/GoHttpLib.dll
+/GoHttpLib/GoHttpLib.h
+/GoHttp-uTLS/.vs
+/GoHttp-uTLS/bin
+/GoHttp-uTLS/obj
