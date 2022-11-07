@@ -146,18 +146,28 @@ namespace GoHttp_uTLS
             {
                 try
                 {
+                    var exception = null as Exception;
+
                     var json = "";
                     GoHttp._HttpGetBytes(
                         Encoding.UTF8.GetBytes(url),
                         Encoding.UTF8.GetBytes(header),
                         (ptr, n) =>
                         {
-                            var buffer = new byte[n];
-                            Marshal.Copy(ptr, buffer, 0, n);
-                            callback.Invoke(buffer);
-                            if (token.IsCancellationRequested)
+                            try
+                            {
+                                var buffer = new byte[n];
+                                Marshal.Copy(ptr, buffer, 0, n);
+                                callback.Invoke(buffer);
+                                if (token.IsCancellationRequested)
+                                    return 1;
+                                return 0;
+                            }
+                            catch (Exception ex)
+                            {
+                                exception = ex;
                                 return 1;
-                            return 0;
+                            }
                         },
                         (str) =>
                         {
@@ -166,6 +176,8 @@ namespace GoHttp_uTLS
                         (int)httpBody,
                         (int)timeout.TotalMilliseconds,
                         (int)ClientHello);
+                    if (exception != null)
+                        throw exception;
                     token.ThrowIfCancellationRequested();
                     var result = JsonConvert.DeserializeObject<Result>(json);
                     if (result == null)

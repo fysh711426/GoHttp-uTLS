@@ -8,7 +8,7 @@
     <RootNamespace>GoHttp_uTLS</RootNamespace>
     <Description>This repo is a C# wrapper for uTLS.
 It provides ClientHello fingerprint resistance, which can simulate browser TLS handshake.</Description>
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
     <PackageProjectUrl>https://github.com/fysh711426/GoHttp-uTLS</PackageProjectUrl>
     <PackageLicenseExpression>BSD-3-Clause</PackageLicenseExpression>
     <PackageLicenseFile></PackageLicenseFile>
@@ -33,4 +33,14 @@ It provides ClientHello fingerprint resistance, which can simulate browser TLS h
     <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="..\GoHttpLib\GoHttpLib.dll">
+      <Pack>true</Pack>
+      <Visible>false</Visible>
+      <PackagePath>contentFiles/any/any</PackagePath>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <PackageCopyToOutput>true</PackageCopyToOutput>
+    </Content>
+  </ItemGroup>
+  
 </Project>
