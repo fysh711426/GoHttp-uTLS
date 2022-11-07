@@ -10,7 +10,7 @@
 It provides ClientHello fingerprint resistance, which can simulate browser TLS handshake.</Description>
     <Version>1.0.0</Version>
     <PackageProjectUrl>https://github.com/fysh711426/GoHttp-uTLS</PackageProjectUrl>
-    <PackageLicenseExpression>...</PackageLicenseExpression>
+    <PackageLicenseExpression>BSD-3-Clause</PackageLicenseExpression>
     <PackageLicenseFile></PackageLicenseFile>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>

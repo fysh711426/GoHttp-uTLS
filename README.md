@@ -79,3 +79,9 @@ http.Timeout = TimeSpan.FromSeconds(30);
 // Set the browser fingerprint used by uTLS
 http.ClientHello = ClientHello.HelloChrome_Auto;
 ```
+
+---  
+
+### Declare  
+
+This repo is developed by fysh711426, not an official uTLS product.  
