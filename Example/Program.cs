@@ -33,6 +33,13 @@ namespace Example
                     fs.Write(bytes, 0, bytes.Length);
                 });
             }
+
+            // Set request header
+            var referer = "";
+            var userAgent = "";
+            var cookie = "aaa=1; bbb=2";
+            var header = $"Referer:{referer}|User-Agent:{userAgent}|Cookie:{cookie}";
+            var html = await http.GetAsync(url, header);
         }
     }
 }
