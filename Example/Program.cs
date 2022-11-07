@@ -35,10 +35,9 @@ namespace Example
             }
 
             // Set request header
-            var referer = "";
-            var userAgent = "";
+            var userAgent = "xxx";
             var cookie = "aaa=1; bbb=2";
-            var header = $"Referer:{referer}|User-Agent:{userAgent}|Cookie:{cookie}";
+            var header = $"User-Agent:{userAgent}|Cookie:{cookie}";
             var html = await http.GetAsync(url, header);
         }
     }
